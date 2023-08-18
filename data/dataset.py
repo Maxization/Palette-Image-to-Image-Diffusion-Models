@@ -47,7 +47,8 @@ def make_dataset_mri(dir):
 def pil_loader(path):
     return Image.open(path).convert('RGB')
 
-def brain_mask(img, low_int_threshold=.05):
+def brain_mask(path, low_int_threshold=.05):
+    img = cv2.imread(path)
     img = cv2.cvtColor(np.array(img), cv2.COLOR_BGR2GRAY)
     img_8u = (img.astype('float32') / img.max() * 255).astype('uint8')
 
@@ -88,7 +89,7 @@ class InpaintMRIDataset(data.Dataset):
         ret = {}
         path = self.imgs[index]
         img = self.tfs(self.loader(path))
-        mask = self.get_mask(np.array(img))
+        mask = self.get_mask(path)
         cond_image = img*(1. - mask) + mask*torch.randn_like(img)
         mask_img = img*(1. - mask) + mask
 
@@ -102,9 +103,9 @@ class InpaintMRIDataset(data.Dataset):
     def __len__(self):
         return len(self.imgs)
 
-    def get_mask(self, img):
+    def get_mask(self, path):
         if self.mask_mode == 'center':
-            mask = brain_mask(img)
+            mask = brain_mask(path)
         elif self.mask_mode == 'file':
             pass
         else:
