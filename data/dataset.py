@@ -94,7 +94,7 @@ class InpaintMRIDataset(data.Dataset):
         ret = {}
         path = self.imgs[index]
         img = self.tfs(self.loader(path))
-        mask = self.masks[index]
+        mask = self.get_mask(index)
         cond_image = img*(1. - mask) + mask*torch.randn_like(img)
         mask_img = img*(1. - mask) + mask
 
@@ -108,14 +108,9 @@ class InpaintMRIDataset(data.Dataset):
     def __len__(self):
         return len(self.imgs)
 
-    def get_mask(self, path):
-        if self.mask_mode == 'center':
-            mask = brain_mask(path)
-        elif self.mask_mode == 'file':
-            pass
-        else:
-            raise NotImplementedError(
-                f'Mask mode {self.mask_mode} has not been implemented.')
+    def get_mask(self, index):
+        mask = self.masks[index]
+
         return torch.from_numpy(mask).permute(2,0,1)
 
 
