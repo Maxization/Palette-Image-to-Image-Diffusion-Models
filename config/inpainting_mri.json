@@ -22,7 +22,7 @@
                     "data_root": "E:\\mri\\train",
                     "data_len": -1,
                     "mask_config": {
-                        "mask_mode": "hybrid"
+                        "mask_mode": "center"
                     }
                 } 
             },

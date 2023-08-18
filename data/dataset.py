@@ -4,6 +4,7 @@ from PIL import Image
 import os
 import torch
 import numpy as np
+import cv2
 
 from .util.mask import (bbox2mask, brush_stroke_mask, get_irregular_mask, random_bbox, random_cropping_bbox)
 
@@ -46,6 +47,26 @@ def make_dataset_mri(dir):
 def pil_loader(path):
     return Image.open(path).convert('RGB')
 
+def brain_mask(img, low_int_threshold=.05):
+    img = cv2.cvtColor(np.array(img), cv2.COLOR_BGR2GRAY)
+    img_8u = (img.astype('float32') / img.max() * 255).astype('uint8')
+
+    if low_int_threshold < 1.:
+        low_th = int(img_8u.max() * low_int_threshold)
+    else:
+        low_th = int(low_int_threshold)
+    _, img_bin = cv2.threshold(
+        img_8u, low_th, maxval=255, type=cv2.THRESH_BINARY)
+
+    contours, _ = cv2.findContours(
+        img_bin.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    cont_areas = [cv2.contourArea(cont) for cont in contours]
+    idx = np.argmax(cont_areas)  # find the largest contour, i.e. breast.
+    brain_mask = cv2.drawContours(
+        np.zeros_like(img_bin), contours, idx, 255, -1)  # fill the contour.
+
+    return brain_mask
+
 class InpaintMRIDataset(data.Dataset):
     def __init__(self, data_root, mask_config={}, data_len=-1, image_size=[256, 256], loader=pil_loader):
         imgs = make_dataset_mri(data_root)
@@ -67,7 +88,7 @@ class InpaintMRIDataset(data.Dataset):
         ret = {}
         path = self.imgs[index]
         img = self.tfs(self.loader(path))
-        mask = self.get_mask()
+        mask = self.get_mask(np.array(img))
         cond_image = img*(1. - mask) + mask*torch.randn_like(img)
         mask_img = img*(1. - mask) + mask
 
@@ -81,20 +102,9 @@ class InpaintMRIDataset(data.Dataset):
     def __len__(self):
         return len(self.imgs)
 
-    def get_mask(self):
-        if self.mask_mode == 'bbox':
-            mask = bbox2mask(self.image_size, random_bbox())
-        elif self.mask_mode == 'center':
-            h, w = self.image_size
-            mask = bbox2mask(self.image_size, (h//4, w//4, h//2, w//2))
-        elif self.mask_mode == 'irregular':
-            mask = get_irregular_mask(self.image_size)
-        elif self.mask_mode == 'free_form':
-            mask = brush_stroke_mask(self.image_size)
-        elif self.mask_mode == 'hybrid':
-            regular_mask = bbox2mask(self.image_size, random_bbox())
-            irregular_mask = brush_stroke_mask(self.image_size, )
-            mask = regular_mask | irregular_mask
+    def get_mask(self, img):
+        if self.mask_mode == 'center':
+            mask = brain_mask(img)
         elif self.mask_mode == 'file':
             pass
         else:
