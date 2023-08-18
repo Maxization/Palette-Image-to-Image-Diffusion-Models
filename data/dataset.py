@@ -42,7 +42,10 @@ def make_dataset_mri(dir):
                     path = os.path.join(root, fname)
                     images.append(path)
 
-    return images
+    masks = []
+    for path in images:
+        masks.append(brain_mask(path))
+    return images, masks
 
 def pil_loader(path):
     return Image.open(path).convert('RGB')
@@ -65,16 +68,18 @@ def brain_mask(path, low_int_threshold=.05):
     idx = np.argmax(cont_areas)  # find the largest contour, i.e. breast.
     brain_mask = cv2.drawContours(
         np.zeros_like(img_bin), contours, idx, 255, -1)  # fill the contour.
-
+    brain_mask = brain_mask[:, :, None]
     return brain_mask
 
 class InpaintMRIDataset(data.Dataset):
     def __init__(self, data_root, mask_config={}, data_len=-1, image_size=[256, 256], loader=pil_loader):
-        imgs = make_dataset_mri(data_root)
+        imgs, masks = make_dataset_mri(data_root)
         if data_len > 0:
             self.imgs = imgs[:int(data_len)]
+            self.masks = masks[:int(data_len)]
         else:
             self.imgs = imgs
+        self.masks = masks
         self.tfs = transforms.Compose([
                 transforms.Resize((image_size[0], image_size[1])),
                 transforms.ToTensor(),
@@ -89,7 +94,7 @@ class InpaintMRIDataset(data.Dataset):
         ret = {}
         path = self.imgs[index]
         img = self.tfs(self.loader(path))
-        mask = self.get_mask(path)
+        mask = self.masks[index]
         cond_image = img*(1. - mask) + mask*torch.randn_like(img)
         mask_img = img*(1. - mask) + mask
 
