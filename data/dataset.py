@@ -109,7 +109,14 @@ class InpaintMRIDataset(data.Dataset):
         return len(self.imgs)
 
     def get_mask(self, index):
-        mask = self.masks[index]
+        if self.mask_mode == 'center':
+            h, w = self.image_size
+            mask = bbox2mask(self.image_size, (h//4, w//4, h//2, w//2))
+        elif self.mask_mode == 'brain':
+            mask = self.masks[index]
+        else:
+            raise NotImplementedError(
+                f'Mask mode {self.mask_mode} has not been implemented.')
 
         return torch.from_numpy(mask).permute(2,0,1)
 
